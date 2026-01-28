@@ -14,7 +14,7 @@ document.getElementById('save').addEventListener('click', () => {
     autoOpen,
     enabled
   }, () => {
-    const status = document.getElementById('statusMessage');
+    const status = document.getElementById('status');
     status.textContent = 'Settings saved!';
     setTimeout(() => { status.textContent = ''; }, 2000);
   });
