@@ -2,26 +2,28 @@
 console.log("Personal Bidding Agent Active");
 
 let config = {
-    minBudget: 100,
-    maxBids: 5,
+    minBudget: 0,
+    maxBids: 100,
     geminiApiKey: '',
-    professionalProfile: ''
+    professionalProfile: '',
+    autoOpen: false,
+    enabled: true
 };
 
 // Load config from storage
-chrome.storage.local.get(['geminiApiKey', 'professionalProfile', 'minBudget', 'maxBids'], (data) => {
+chrome.storage.local.get(['geminiApiKey', 'professionalProfile', 'minBudget', 'maxBids', 'autoOpen', 'enabled'], (data) => {
     config = { ...config, ...data };
     console.log("Agent Configuration Loaded:", config);
 });
 
 // MutationObserver to watch for new project alerts
 const observer = new MutationObserver((mutations) => {
+    if (!config.enabled) return;
+
     for (const mutation of mutations) {
         if (mutation.addedNodes.length) {
             mutation.addedNodes.forEach(node => {
                 if (node.nodeType === 1) {
-                    // Check if it's a project alert (toast or new list item)
-                    // Note: Selectors here are based on common patterns; real-time verification is needed
                     checkForProjectAlert(node);
                 }
             });
@@ -30,35 +32,56 @@ const observer = new MutationObserver((mutations) => {
 });
 
 function checkForProjectAlert(node) {
-    // Example selectors for Freelancer.com dashboard alerts
-    // These often have classes like 'ProjectCard' or 'Toast'
-    const card = node.closest('[data-testid="project-card"]') || (node.matches && node.matches('[data-testid="project-card"]') ? node : null);
+    // Broaden selectors for Freelancer's various layouts
+    const selectors = [
+        '[data-testid="project-card"]',
+        '.JobSearchCard-primary',
+        '.project-details',
+        'fl-project-card',
+        '.ProjectCard'
+    ];
 
-    if (card) {
-        processProjectCard(card);
+    let foundCard = null;
+    for (const selector of selectors) {
+        if (node.matches && node.matches(selector)) {
+            foundCard = node;
+            break;
+        }
+        foundCard = node.querySelector ? node.querySelector(selector) : null;
+        if (foundCard) break;
+    }
+
+    if (foundCard) {
+        processProjectCard(foundCard);
     }
 }
 
 function processProjectCard(card) {
+    if (card.hasAttribute('data-agent-processed')) return;
+    card.setAttribute('data-agent-processed', 'true');
+
     try {
-        const title = card.querySelector('h3')?.innerText || card.querySelector('.project-title')?.innerText;
-        const budgetText = card.querySelector('.project-budget')?.innerText || '';
-        const bidCountText = card.querySelector('.bid-count')?.innerText || '';
+        const title = card.querySelector('h3, .project-title, .JobSearchCard-primary-title-link')?.innerText || "Unknown Project";
+        const budgetText = card.querySelector('.project-budget, .JobSearchCard-primary-price')?.innerText || '';
+        const bidCountText = card.querySelector('.bid-count, .JobSearchCard-secondary-entry')?.innerText || '';
 
         const budget = parsePrice(budgetText);
         const bids = parseInt(bidCountText.replace(/[^0-9]/g, '')) || 0;
 
-        console.log(`Analyzing Project: ${title} | Budget: $${budget} | Bids: ${bids}`);
+        console.log(`Agent checking: ${title} | Budget: ${budgetText} | Bids: ${bids}`);
 
-        if (budget >= config.minBudget && bids <= config.maxBids) {
-            console.log("MATCH FOUND! Opening project...");
+        // Baseline: Match almost everything if strictly filtering is off
+        const isMatch = (budget >= config.minBudget && bids <= config.maxBids);
+
+        if (isMatch) {
+            console.log("MATCH FOUND!", title);
             highlightMatch(card);
-            // alert("New Project Match: " + title);
 
-            // Auto-open in new tab (safely)
-            const link = card.querySelector('a')?.href;
-            if (link) {
-                window.open(link, '_blank');
+            if (config.autoOpen) {
+                const link = card.querySelector('a')?.href;
+                if (link && !link.includes('javascript:void(0)')) {
+                    window.open(link, '_blank');
+                }
             }
         }
     } catch (e) {
@@ -91,12 +114,32 @@ if (window.location.href.includes('/projects/')) {
 function injectProposalButton() {
     // Wait for the bid form to load
     const interval = setInterval(() => {
-        const bidTextArea = document.querySelector('textarea[name="description"]') || document.querySelector('#description');
+        if (!config.enabled) {
+            clearInterval(interval);
+            return;
+        }
+
+        const bidTextAreaSelectors = [
+            'textarea[name="description"]',
+            '#description',
+            '.BidFormat-description textarea',
+            '[data-testid="bid-description-input"]'
+        ];
+
+        let bidTextArea = null;
+        for (const selector of bidTextAreaSelectors) {
+            bidTextArea = document.querySelector(selector);
+            if (bidTextArea) break;
+        }
+
         if (bidTextArea && !document.querySelector('#gemini-generate-btn')) {
             const btn = document.createElement('button');
             btn.id = 'gemini-generate-btn';
             btn.innerText = '✨ Generate AI Proposal';
-            btn.style = "margin-bottom: 10px; padding: 8px 15px; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;";
+            btn.style = "margin-bottom: 10px; padding: 10px 20px; background: #000; color: #fff; border: 2px solid #FFD700; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.3s ease;";
+
+            btn.onmouseover = () => btn.style.backgroundColor = '#333';
+            btn.onmouseout = () => btn.style.backgroundColor = '#000';
 
             btn.onclick = (e) => {
                 e.preventDefault();
@@ -104,9 +147,10 @@ function injectProposalButton() {
             };
 
             bidTextArea.parentNode.insertBefore(btn, bidTextArea);
+            console.log("Agent: AI Button Injected");
             clearInterval(interval);
         }
-    }, 1000);
+    }, 1500);
 }
 
 async function generateProposal(textArea) {

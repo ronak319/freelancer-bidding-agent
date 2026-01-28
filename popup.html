@@ -81,18 +81,25 @@
   </div>
 
   <div class="field">
-    <label for="minBudget">Min Budget ($)</label>
-    <input type="number" id="minBudget" value="100">
+    <label>Filters (Set to 0/999 to catch all)</label>
+    <div style="display: flex; gap: 10px;">
+      <input type="number" id="minBudget" placeholder="Min $" style="width: 50%;">
+      <input type="number" id="maxBids" placeholder="Max Bids" style="width: 50%;">
+    </div>
   </div>
 
-  <div class="field">
-    <label for="maxBids">Max Bids on Project</label>
-    <input type="number" id="maxBids" value="5">
+  <div class="field" style="display: flex; align-items: center; gap: 10px;">
+    <input type="checkbox" id="autoOpen" style="width: auto;">
+    <label for="autoOpen" style="margin: 0;">Auto-open matching projects</label>
+  </div>
+
+  <div class="field" style="display: flex; align-items: center; gap: 10px;">
+    <input type="checkbox" id="enabled" style="width: auto;" checked>
+    <label for="enabled" style="margin: 0;">Agent Active</label>
   </div>
 
   <button id="save">Save Settings</button>
-  <div class="status" id="statusMessage"></div>
-
+  <div id="status" class="status"></div>
   <script src="popup.js"></script>
 </body>
 
