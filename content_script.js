@@ -37,11 +37,10 @@ const observer = new MutationObserver((mutations) => {
 
 function checkForViewNewProjects(node) {
     // Select the "VIEW NEW PROJECTS" button (pink tooltip)
-    // Looking for text "VIEW NEW PROJECTS" in pinkish buttons
-    const btn = node.matches && node.matches('button, div') ? node : node.querySelector ? node.querySelector('button, div') : null;
-    if (btn && btn.innerText && btn.innerText.includes('VIEW NEW PROJECTS')) {
+    const viewNewBtn = document.querySelector('button[primary], .view-new-projects-btn, .ViewNewProjectsBtn');
+    if (viewNewBtn && viewNewBtn.innerText && /VIEW NEW PROJECTS/i.test(viewNewBtn.innerText)) {
         console.log("Agent: New projects alert detected. Clicking...");
-        btn.click();
+        viewNewBtn.click();
     }
 }
 
@@ -52,7 +51,8 @@ function checkForProjectAlert(node) {
         '.project-details',
         'fl-project-card',
         '.ProjectCard',
-        '.Card-primary'
+        '.Card-primary',
+        '.JobSearchCard'
     ];
 
     let foundCard = null;
@@ -75,15 +75,15 @@ function processProjectCard(card) {
     card.setAttribute('data-agent-processed', 'true');
 
     try {
-        const titleEl = card.querySelector('h3, .project-title, .JobSearchCard-primary-title-link, .Card-title');
+        const titleEl = card.querySelector('h3, .project-title, .JobSearchCard-primary-title-link, .Card-title, .JobSearchCard-primary-heading a');
         const title = titleEl?.innerText || "Unknown Project";
-        const budgetText = card.querySelector('.project-budget, .JobSearchCard-primary-price, .Card-price')?.innerText || '';
-        const bidCountText = card.querySelector('.bid-count, .JobSearchCard-secondary-entry, .Card-bids')?.innerText || '';
+        const budgetText = card.querySelector('.project-budget, .JobSearchCard-primary-price, .Card-price, .JobSearchCard-primary-price')?.innerText || '';
+        const bidCountText = card.querySelector('.bid-count, .JobSearchCard-secondary-entry, .Card-bids, .JobSearchCard-secondary-entry')?.innerText || '';
 
         const budget = parsePrice(budgetText);
         const bids = parseInt(bidCountText.replace(/[^0-9]/g, '')) || 0;
 
-        console.log(`Agent: Processing -> ${title} | ${budgetText} | ${bidCountText}`);
+        console.log(`Agent: Analyzing -> ${title} | ${budgetText}`);
 
         const isMatch = (budget >= config.minBudget && bids <= config.maxBids);
 
@@ -91,11 +91,14 @@ function processProjectCard(card) {
             highlightMatch(card);
 
             if (config.autoOpen) {
-                // Find the link more robustly
-                const linkEl = card.querySelector('a[href*="/projects/"], a[href*="/jobs/"], .JobSearchCard-primary-title-link');
+                // Find project link - check title link or any internal freelancer link
+                let linkEl = card.querySelector('a[href*="/projects/"], a[href*="/jobs/"], .JobSearchCard-primary-title-link, .JobSearchCard-primary-heading a');
+
                 if (linkEl && linkEl.href && !linkEl.href.includes('javascript:')) {
-                    console.log("Agent: Auto-opening match:", title);
-                    window.open(linkEl.href, '_blank');
+                    console.log("Agent: Auto-opening match ->", title);
+                    // Open in new tab but ensure it's a real click feel
+                    const projectUrl = linkEl.href;
+                    setTimeout(() => window.open(projectUrl, '_blank'), 500);
                 }
             }
         }
@@ -119,11 +122,33 @@ function highlightMatch(card) {
     card.style.transition = "all 0.5s ease";
 }
 
-// Start watching the page
-observer.observe(document.body, { childList: true, subtree: true });
+// 3. Process existing projects on load (for Search results page)
+function processExistingProjects() {
+    console.log("Agent: Checking existing projects on page...");
+    const selectors = [
+        '[data-testid="project-card"]',
+        '.JobSearchCard-primary',
+        '.project-details',
+        'fl-project-card',
+        '.ProjectCard',
+        '.Card-primary'
+    ];
+
+    selectors.forEach(selector => {
+        document.querySelectorAll(selector).forEach(card => {
+            processProjectCard(card);
+        });
+    });
+}
+
+// Run initial check and then start observer
+setTimeout(() => {
+    processExistingProjects();
+    observer.observe(document.body, { childList: true, subtree: true });
+}, 3000); // Wait for page to settle
 
 // UI Injection logic for Project Page
-if (window.location.href.includes('/projects/') || window.location.href.includes('/jobs/')) {
+if (window.location.href.includes('/projects/') || window.location.href.includes('/jobs/') || window.location.href.match(/\/projects\/.*\/$/)) {
     injectProposalButton();
 }
 
@@ -141,7 +166,8 @@ function injectProposalButton() {
             '.BidFormat-description textarea',
             '[data-testid="bid-description-input"]',
             '.fl-textarea textarea',
-            'textarea.FormControl'
+            'textarea.FormControl',
+            'textarea.fl-textarea'
         ];
 
         let bidTextArea = null;
@@ -156,22 +182,20 @@ function injectProposalButton() {
             btn.id = 'gemini-generate-btn';
             btn.innerText = '✨ Generate AI Proposal';
             btn.type = 'button'; // Prevent form submission
-            btn.style = "margin-bottom: 12px; padding: 12px 24px; background: #000; color: #FFD700; border: 2px solid #FFD700; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.3s ease; display: block; width: fit-content;";
+            btn.style = "margin-bottom: 12px; padding: 12px 24px; background: #000; color: #FFD700; border: 2px solid #FFD700; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: all 0.3s ease; display: block; width: fit-content;";
 
             btn.onmouseover = () => {
                 btn.style.backgroundColor = '#FFD700';
                 btn.style.color = '#000';
-                btn.style.transform = 'translateY(-2px)';
             };
             btn.onmouseout = () => {
                 btn.style.backgroundColor = '#000';
                 btn.style.color = '#FFD700';
-                btn.style.transform = 'translateY(0)';
             };
 
             // Find best container to insert before
-            const container = bidTextArea.closest('.fl-textarea') || bidTextArea.parentNode;
-            container.insertBefore(btn, container.firstChild === btn ? container.childNodes[1] : container.firstChild);
+            const container = bidTextArea.closest('.fl-textarea, .BidFormat-description, .form-group') || bidTextArea.parentNode;
+            container.insertBefore(btn, container.firstChild);
 
             btn.onclick = (e) => {
                 e.preventDefault();
