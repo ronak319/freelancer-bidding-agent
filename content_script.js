@@ -24,6 +24,10 @@ const observer = new MutationObserver((mutations) => {
         if (mutation.addedNodes.length) {
             mutation.addedNodes.forEach(node => {
                 if (node.nodeType === 1) {
+                    // 1. Auto-click for "VIEW NEW PROJECTS" tooltip
+                    checkForViewNewProjects(node);
+
+                    // 2. Check for project cards
                     checkForProjectAlert(node);
                 }
             });
@@ -31,24 +35,34 @@ const observer = new MutationObserver((mutations) => {
     }
 });
 
+function checkForViewNewProjects(node) {
+    // Select the "VIEW NEW PROJECTS" button (pink tooltip)
+    // Looking for text "VIEW NEW PROJECTS" in pinkish buttons
+    const btn = node.matches && node.matches('button, div') ? node : node.querySelector ? node.querySelector('button, div') : null;
+    if (btn && btn.innerText && btn.innerText.includes('VIEW NEW PROJECTS')) {
+        console.log("Agent: New projects alert detected. Clicking...");
+        btn.click();
+    }
+}
+
 function checkForProjectAlert(node) {
-    // Broaden selectors for Freelancer's various layouts
     const selectors = [
         '[data-testid="project-card"]',
         '.JobSearchCard-primary',
         '.project-details',
         'fl-project-card',
-        '.ProjectCard'
+        '.ProjectCard',
+        '.Card-primary'
     ];
 
     let foundCard = null;
     for (const selector of selectors) {
+        if (foundCard) break;
         if (node.matches && node.matches(selector)) {
             foundCard = node;
-            break;
+        } else if (node.querySelector) {
+            foundCard = node.querySelector(selector);
         }
-        foundCard = node.querySelector ? node.querySelector(selector) : null;
-        if (foundCard) break;
     }
 
     if (foundCard) {
@@ -61,26 +75,27 @@ function processProjectCard(card) {
     card.setAttribute('data-agent-processed', 'true');
 
     try {
-        const title = card.querySelector('h3, .project-title, .JobSearchCard-primary-title-link')?.innerText || "Unknown Project";
-        const budgetText = card.querySelector('.project-budget, .JobSearchCard-primary-price')?.innerText || '';
-        const bidCountText = card.querySelector('.bid-count, .JobSearchCard-secondary-entry')?.innerText || '';
+        const titleEl = card.querySelector('h3, .project-title, .JobSearchCard-primary-title-link, .Card-title');
+        const title = titleEl?.innerText || "Unknown Project";
+        const budgetText = card.querySelector('.project-budget, .JobSearchCard-primary-price, .Card-price')?.innerText || '';
+        const bidCountText = card.querySelector('.bid-count, .JobSearchCard-secondary-entry, .Card-bids')?.innerText || '';
 
         const budget = parsePrice(budgetText);
         const bids = parseInt(bidCountText.replace(/[^0-9]/g, '')) || 0;
 
-        console.log(`Agent checking: ${title} | Budget: ${budgetText} | Bids: ${bids}`);
+        console.log(`Agent: Processing -> ${title} | ${budgetText} | ${bidCountText}`);
 
-        // Baseline: Match almost everything if strictly filtering is off
         const isMatch = (budget >= config.minBudget && bids <= config.maxBids);
 
         if (isMatch) {
-            console.log("MATCH FOUND!", title);
             highlightMatch(card);
 
             if (config.autoOpen) {
-                const link = card.querySelector('a')?.href;
-                if (link && !link.includes('javascript:void(0)')) {
-                    window.open(link, '_blank');
+                // Find the link more robustly
+                const linkEl = card.querySelector('a[href*="/projects/"], a[href*="/jobs/"], .JobSearchCard-primary-title-link');
+                if (linkEl && linkEl.href && !linkEl.href.includes('javascript:')) {
+                    console.log("Agent: Auto-opening match:", title);
+                    window.open(linkEl.href, '_blank');
                 }
             }
         }
@@ -90,29 +105,30 @@ function processProjectCard(card) {
 }
 
 function parsePrice(text) {
-    // Handles '$100 - $250' or '$500 USD'
-    const matches = text.match(/\d+/g);
+    const matches = text.match(/\d+(?:,\d+)?/g);
     if (matches && matches.length) {
-        return Math.max(...matches.map(Number));
+        // Clean commas and get the max value if it's a range
+        return Math.max(...matches.map(m => parseInt(m.replace(/,/g, ''))));
     }
     return 0;
 }
 
 function highlightMatch(card) {
     card.style.border = "3px solid #0d6efd";
-    card.style.backgroundColor = "#e7f1ff";
+    card.style.backgroundColor = "#fafcff";
+    card.style.transition = "all 0.5s ease";
 }
 
 // Start watching the page
 observer.observe(document.body, { childList: true, subtree: true });
 
 // UI Injection logic for Project Page
-if (window.location.href.includes('/projects/')) {
+if (window.location.href.includes('/projects/') || window.location.href.includes('/jobs/')) {
     injectProposalButton();
 }
 
 function injectProposalButton() {
-    // Wait for the bid form to load
+    console.log("Agent: Attempting to find bid area...");
     const interval = setInterval(() => {
         if (!config.enabled) {
             clearInterval(interval);
@@ -123,7 +139,9 @@ function injectProposalButton() {
             'textarea[name="description"]',
             '#description',
             '.BidFormat-description textarea',
-            '[data-testid="bid-description-input"]'
+            '[data-testid="bid-description-input"]',
+            '.fl-textarea textarea',
+            'textarea.FormControl'
         ];
 
         let bidTextArea = null;
@@ -133,24 +151,36 @@ function injectProposalButton() {
         }
 
         if (bidTextArea && !document.querySelector('#gemini-generate-btn')) {
+            console.log("Agent: Bid area found. Injecting button...");
             const btn = document.createElement('button');
             btn.id = 'gemini-generate-btn';
             btn.innerText = '✨ Generate AI Proposal';
-            btn.style = "margin-bottom: 10px; padding: 10px 20px; background: #000; color: #fff; border: 2px solid #FFD700; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.3s ease;";
+            btn.type = 'button'; // Prevent form submission
+            btn.style = "margin-bottom: 12px; padding: 12px 24px; background: #000; color: #FFD700; border: 2px solid #FFD700; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.3s ease; display: block; width: fit-content;";
 
-            btn.onmouseover = () => btn.style.backgroundColor = '#333';
-            btn.onmouseout = () => btn.style.backgroundColor = '#000';
+            btn.onmouseover = () => {
+                btn.style.backgroundColor = '#FFD700';
+                btn.style.color = '#000';
+                btn.style.transform = 'translateY(-2px)';
+            };
+            btn.onmouseout = () => {
+                btn.style.backgroundColor = '#000';
+                btn.style.color = '#FFD700';
+                btn.style.transform = 'translateY(0)';
+            };
+
+            // Find best container to insert before
+            const container = bidTextArea.closest('.fl-textarea') || bidTextArea.parentNode;
+            container.insertBefore(btn, container.firstChild === btn ? container.childNodes[1] : container.firstChild);
 
             btn.onclick = (e) => {
                 e.preventDefault();
                 generateProposal(bidTextArea);
             };
 
-            bidTextArea.parentNode.insertBefore(btn, bidTextArea);
-            console.log("Agent: AI Button Injected");
             clearInterval(interval);
         }
-    }, 1500);
+    }, 2000); // Check every 2 seconds
 }
 
 async function generateProposal(textArea) {
@@ -159,10 +189,11 @@ async function generateProposal(textArea) {
         return;
     }
 
-    textArea.value = "Generating proposal...";
+    const originalValue = textArea.value;
+    textArea.value = "🤖 Analyzing project and crafting proposal...";
 
-    const projectTitle = document.querySelector('h1')?.innerText || "this project";
-    const projectDesc = document.querySelector('.project-description')?.innerText || "the project details given";
+    const projectTitle = document.querySelector('h1, .PageProjectDetails-title')?.innerText || "this project";
+    const projectDesc = document.querySelector('.project-description, .PageProjectDetails-description, [data-testid="project-description"]')?.innerText || "the project details given";
 
     const prompt = `
         You are a professional freelancer with the following profile:
@@ -173,10 +204,10 @@ async function generateProposal(textArea) {
         Description: ${projectDesc}
 
         Requirements:
-        1. Keep it professional but friendly.
-        2. Focus on why your skills match the requirements.
+        1. Keep it professional, friendly, and HUMAN-like (avoid overly formal AI corporate speak).
+        2. Focus on exactly how your experience solves their specific problem.
         3. Do not use placeholders like [Your Name].
-        4. Make it direct and persuasive.
+        4. Be direct and persuasive. Start with a strong hook about their problem.
     `;
 
     try {
@@ -189,10 +220,17 @@ async function generateProposal(textArea) {
         });
 
         const data = await response.json();
-        const generatedText = data.candidates[0].content.parts[0].text;
-        textArea.value = generatedText;
+        if (data.candidates && data.candidates[0].content) {
+            const generatedText = data.candidates[0].content.parts[0].text;
+            textArea.value = generatedText;
+            // Trigger input event so React/Vue sites detect the change
+            textArea.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+            throw new Error("Invalid API response structure");
+        }
     } catch (e) {
         console.error("Gemini API Error:", e);
-        textArea.value = "Error generating proposal. Check console.";
+        textArea.value = originalValue;
+        alert("Error generating proposal: " + e.message);
     }
 }
