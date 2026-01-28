@@ -5,14 +5,17 @@
   "description": "Your personal assistant for finding and bidding on projects on Freelancer.com.",
   "permissions": [
     "storage",
-    "activeTab",
-    "tabs"
+    "tabs",
+    "activeTab"
   ],
   "host_permissions": [
-    "https://www.freelancer.com/*"
+    "*://www.freelancer.com/*"
   ],
   "action": {
     "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
@@ -23,13 +26,5 @@
         "content_script.js"
       ]
     }
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "permissions": [
-    "storage",
-    "tabs"
   ]
 }
-```
