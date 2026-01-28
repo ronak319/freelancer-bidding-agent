@@ -77,22 +77,24 @@ function processProjectCard(card) {
     card.setAttribute('data-agent-processed', 'true');
 
     try {
-        const titleEl = card.querySelector('h3, .project-title, .JobSearchCard-primary-title-link, .Card-title, .JobSearchCard-primary-heading a');
-        const title = titleEl?.innerText || "Unknown Project";
-        const budgetText = card.querySelector('.project-budget, .JobSearchCard-primary-price, .Card-price, .JobSearchCard-primary-price')?.innerText || '';
+        // Broad title search
+        const titleEl = card.querySelector('h3, .project-title, [class*="title-link"], .Card-title, [class*="heading"] a, a[href*="/projects/"]');
+        const title = titleEl?.innerText?.trim() || "Unknown Title";
 
-        console.log(`Agent: Captured -> ${title} | ${budgetText}`);
+        // Broad link search
+        let linkEl = card.querySelector('a[href*="/projects/"], a[href*="/jobs/"], [class*="title-link"], [class*="heading"] a');
+        if (!linkEl && card.tagName === 'A' && card.href.includes('/projects/')) linkEl = card;
+
+        console.log(`Agent: Found Project -> "${title}"`);
 
         // HARDCODED: Open the very first project captured
         if (!firstProjectOpened && config.enabled && config.autoOpen) {
-            let linkEl = card.querySelector('a[href*="/projects/"], a[href*="/jobs/"], .JobSearchCard-primary-title-link, .JobSearchCard-primary-heading a');
-
             if (linkEl && linkEl.href && !linkEl.href.includes('javascript:')) {
                 const projectUrl = linkEl.href;
                 console.log(`%c[FIRST MATCH] Opening -> ${title}`, "color: #00ff00; font-weight: bold; background: #000; padding: 5px;");
                 highlightMatch(card);
 
-                firstProjectOpened = true; // Set flag so we don't open 100 tabs at once
+                firstProjectOpened = true;
 
                 chrome.runtime.sendMessage({
                     action: 'openProject',
@@ -104,6 +106,9 @@ function processProjectCard(card) {
                         console.log("Agent: Background confirmed tab creation.");
                     }
                 });
+            } else {
+                // If it fails, we keep searching, so we don't set firstProjectOpened = true
+                console.warn(`Agent: Detected project "${title}" but could not find a clickable link. HTML:`, card.outerHTML.substring(0, 200));
             }
         }
     } catch (e) {
