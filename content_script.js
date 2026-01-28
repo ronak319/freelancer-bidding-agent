@@ -77,13 +77,26 @@ function processProjectCard(card) {
     card.setAttribute('data-agent-processed', 'true');
 
     try {
-        // Broad title search
-        const titleEl = card.querySelector('h3, .project-title, [class*="title-link"], .Card-title, [class*="heading"] a, a[href*="/projects/"]');
-        const title = titleEl?.innerText?.trim() || "Unknown Title";
+        console.log("Agent: Analyzing potential card:", card.tagName, card.className);
 
-        // Broad link search
+        // 1. Broad title search - check children and the card itself
+        const titleEl = card.querySelector('h3, .project-title, [class*="title-link"], .Card-title, [class*="heading"] a, a[href*="/projects/"]') ||
+            (card.innerText && card.tagName !== 'BODY' ? card : null);
+
+        let title = "Unknown Project";
+        if (titleEl) {
+            // If it's a card with many children, try to find the specific title text
+            const specificTitle = titleEl.querySelector('h3, h2, span, a') || titleEl;
+            title = specificTitle.innerText?.trim() || "Unknown Title";
+        }
+
+        // 2. Broad link search - check children and the card itself
         let linkEl = card.querySelector('a[href*="/projects/"], a[href*="/jobs/"], [class*="title-link"], [class*="heading"] a');
-        if (!linkEl && card.tagName === 'A' && card.href.includes('/projects/')) linkEl = card;
+
+        // If no link found in children, check if the card itself is a link
+        if (!linkEl && card.tagName === 'A' && (card.href.includes('/projects/') || card.href.includes('/jobs/'))) {
+            linkEl = card;
+        }
 
         console.log(`Agent: Found Project -> "${title}"`);
 
@@ -107,8 +120,7 @@ function processProjectCard(card) {
                     }
                 });
             } else {
-                // If it fails, we keep searching, so we don't set firstProjectOpened = true
-                console.warn(`Agent: Detected project "${title}" but could not find a clickable link. HTML:`, card.outerHTML.substring(0, 200));
+                console.warn(`Agent: Detected project "${title}" but could not find a clickable link inside or on the element.`);
             }
         }
     } catch (e) {
