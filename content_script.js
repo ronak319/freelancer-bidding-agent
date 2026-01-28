@@ -70,6 +70,8 @@ function checkForProjectAlert(node) {
     }
 }
 
+let firstProjectOpened = false;
+
 function processProjectCard(card) {
     if (card.hasAttribute('data-agent-processed')) return;
     card.setAttribute('data-agent-processed', 'true');
@@ -78,44 +80,31 @@ function processProjectCard(card) {
         const titleEl = card.querySelector('h3, .project-title, .JobSearchCard-primary-title-link, .Card-title, .JobSearchCard-primary-heading a');
         const title = titleEl?.innerText || "Unknown Project";
         const budgetText = card.querySelector('.project-budget, .JobSearchCard-primary-price, .Card-price, .JobSearchCard-primary-price')?.innerText || '';
-        const bidCountText = card.querySelector('.bid-count, .JobSearchCard-secondary-entry, .Card-bids, .JobSearchCard-secondary-entry')?.innerText || '';
 
-        const budget = parsePrice(budgetText);
-        const bids = parseInt(bidCountText.replace(/[^0-9]/g, '')) || 0;
+        console.log(`Agent: Captured -> ${title} | ${budgetText}`);
 
-        console.log(`Agent: Analyzing -> ${title} | ${budgetText}`);
+        // HARDCODED: Open the very first project captured
+        if (!firstProjectOpened && config.enabled && config.autoOpen) {
+            let linkEl = card.querySelector('a[href*="/projects/"], a[href*="/jobs/"], .JobSearchCard-primary-title-link, .JobSearchCard-primary-heading a');
 
-        const isMatch = (budget >= config.minBudget && bids <= config.maxBids);
+            if (linkEl && linkEl.href && !linkEl.href.includes('javascript:')) {
+                const projectUrl = linkEl.href;
+                console.log(`%c[FIRST MATCH] Opening -> ${title}`, "color: #00ff00; font-weight: bold; background: #000; padding: 5px;");
+                highlightMatch(card);
 
-        if (isMatch) {
-            console.log(`%c[MATCH] ${title}`, "color: #00ff00; font-weight: bold; background: #000; padding: 2px 5px;");
-            highlightMatch(card);
+                firstProjectOpened = true; // Set flag so we don't open 100 tabs at once
 
-            if (config.autoOpen) {
-                let linkEl = card.querySelector('a[href*="/projects/"], a[href*="/jobs/"], .JobSearchCard-primary-title-link, .JobSearchCard-primary-heading a');
-
-                if (linkEl && linkEl.href && !linkEl.href.includes('javascript:')) {
-                    const projectUrl = linkEl.href;
-                    console.log(`Agent: Requesting background to open -> ${projectUrl}`);
-
-                    chrome.runtime.sendMessage({
-                        action: 'openProject',
-                        url: projectUrl
-                    }, (response) => {
-                        if (chrome.runtime.lastError) {
-                            console.error("Agent: Background message failed:", chrome.runtime.lastError);
-                        } else {
-                            console.log("Agent: Background confirmed tab creation.");
-                        }
-                    });
-                } else {
-                    console.warn("Agent: Match found but no link detected for", title);
-                }
-            } else {
-                console.log("Agent: Auto-open is DISABLED. Highlighting only.");
+                chrome.runtime.sendMessage({
+                    action: 'openProject',
+                    url: projectUrl
+                }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        console.error("Agent: Background message failed:", chrome.runtime.lastError);
+                    } else {
+                        console.log("Agent: Background confirmed tab creation.");
+                    }
+                });
             }
-        } else {
-            console.log(`Agent: No match for ${title} (Budget/Bid constraints)`);
         }
     } catch (e) {
         console.error("Agent: Error processing project card:", e);
