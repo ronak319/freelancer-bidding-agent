@@ -88,22 +88,37 @@ function processProjectCard(card) {
         const isMatch = (budget >= config.minBudget && bids <= config.maxBids);
 
         if (isMatch) {
+            console.log(`%c[MATCH] ${title}`, "color: #00ff00; font-weight: bold; background: #000; padding: 2px 5px;");
             highlightMatch(card);
 
             if (config.autoOpen) {
-                // Find project link - check title link or any internal freelancer link
                 let linkEl = card.querySelector('a[href*="/projects/"], a[href*="/jobs/"], .JobSearchCard-primary-title-link, .JobSearchCard-primary-heading a');
 
                 if (linkEl && linkEl.href && !linkEl.href.includes('javascript:')) {
-                    console.log("Agent: Auto-opening match ->", title);
-                    // Open in new tab but ensure it's a real click feel
                     const projectUrl = linkEl.href;
-                    setTimeout(() => window.open(projectUrl, '_blank'), 500);
+                    console.log(`Agent: Requesting background to open -> ${projectUrl}`);
+
+                    chrome.runtime.sendMessage({
+                        action: 'openProject',
+                        url: projectUrl
+                    }, (response) => {
+                        if (chrome.runtime.lastError) {
+                            console.error("Agent: Background message failed:", chrome.runtime.lastError);
+                        } else {
+                            console.log("Agent: Background confirmed tab creation.");
+                        }
+                    });
+                } else {
+                    console.warn("Agent: Match found but no link detected for", title);
                 }
+            } else {
+                console.log("Agent: Auto-open is DISABLED. Highlighting only.");
             }
+        } else {
+            console.log(`Agent: No match for ${title} (Budget/Bid constraints)`);
         }
     } catch (e) {
-        console.error("Error processing project card:", e);
+        console.error("Agent: Error processing project card:", e);
     }
 }
 
