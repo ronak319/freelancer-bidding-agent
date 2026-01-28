@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Personal Bidding Agent",
+  "version": "1.0",
+  "description": "Your personal assistant for finding and bidding on projects on Freelancer.com.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.freelancer.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.freelancer.com/*"
+      ],
+      "js": [
+        "content_script.js"
+      ]
+    }
+  ]
+}
